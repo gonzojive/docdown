@@ -1,5 +1,5 @@
 (defpackage :docdown
-    (:use :alexandria :cl-who :css-sexp :cl :bind :contextl)
+    (:use :alexandria :cl-who :css-sexp :cl :bind :contextl :anaphora)
   #+nil(:export
    #:x ))
 
