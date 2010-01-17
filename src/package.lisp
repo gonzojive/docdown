@@ -1,7 +1,6 @@
 (defpackage :docdown
     (:use :alexandria :cl-who :css-sexp :cl :bind :contextl :anaphora)
-  #+nil(:export
-   #:x ))
+  (:export  #:docdown #:defdoc #:generate-html-page))
 
 (in-package :docdown)
 

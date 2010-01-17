@@ -17,7 +17,9 @@
   :licence "BSD"
   :components ((:static-file "docdown.asd")
                (:module "src"
-                        :components ((:file "package"))))
+                        :components ((:file "package")
+				     (:file "introspect" :depends-on ("package"))
+				     (:file "docdown" :depends-on ("introspect" "package")))))
 
   :depends-on (:alexandria :cl-markdown
                :closer-mop :contextl :metabang-bind

@@ -119,7 +119,24 @@
   (declare (ignore rest))
   (format t "FUNCTION modified: ~A ~A" (docnode-subject-symbol node) (docnode-subject node))
   (when (not (docnode-subject node))
-    (setf (docnode-subject node) (fdefinition (docnode-subject-symbol node)))))
+    (setf (docnode-subject node) (fdefinition (docnode-subject-symbol node))))
+  (when (not (docnode-content node))
+    (when-let (docstring (fourth (find :function (function-doc-entry (docnode-subject-symbol node))
+				       :key #'second)))
+      (setf (docnode-content node) (make-instance 'markdown-docnode :markdown docstring)))))
+
+
+(define-layered-class asdf-system-docnode
+  (symbolic-docnode)
+  ())
+
+
+(defgeneric docnode-asdf-system (node)
+  (:documentation "Returns the ASDF system object associated with a docnode.")
+  (:method ((node asdf-system-docnode))
+	   (asdf:find-system (docnode-subject-symbol node))))
+
+(register-docnode-class (find-class 'asdf-system-docnode) :aliases '(:asdf))
 
 ;;; markdown docnode
 (define-layered-class markdown-docnode
@@ -146,9 +163,16 @@
 (define-layered-class page-docnode
   :in-layer html-generation-layer
   (multisection-docnode)
-  ()
+  ((asdf-systems :initarg :systems :initform nil :accessor docnode-asdf-systems))
   )
+
 (register-docnode-class (find-class 'page-docnode) :aliases '(:page))
+(define-option-evaluator :systems (&rest system-designators)
+  (list :systems `(list ,@(mapcar #'(lambda (designator)
+				      (if (or (symbolp designator))
+					  `(defdoc nil :asdf (:subject-symbol ',designator))
+					  designator))
+				  system-designators))))
 
 (define-layered-class section-docnode
   :in-layer html-generation-layer
@@ -226,8 +250,49 @@
       (:style :type "text/css"
 	      (esc (documentation-css))))
      (:body
+      (dolist (asdf-node (docnode-asdf-systems page))
+	(str (doc asdf-node)))
       (:h1 (esc (docnode-title page)))
       (str (call-next-layered-method))))))
+
+(define-layered-method doc
+  :in-layer html-generation-layer ((node asdf-system-docnode) &key &allow-other-keys)
+  (let ((system (docnode-asdf-system node)))
+    (with-html-output-to-string (stream)
+      (:div
+       :class "asdf"
+       (:div (:strong (esc (string-downcase (string (asdf:component-name system)))))
+	     (:small "   [ASDF system]"))
+       (:p (:em (esc (asdf:system-description (docnode-asdf-system node)))))
+       (:table
+	(flet ((output-field (field-name field-value &key (escape t))
+		 (setf field-value (or field-value ""))
+		 (htm
+		  (:tr
+		   (:td (:strong (esc field-name) ":"))
+		   (:td
+		    (cond
+		      ((stringp field-value)
+		       (if (not escape) (str field-value) (esc field-value)))
+		      ((functionp field-value) (funcall field-value))))))))
+	  (output-field "Version" (asdf:component-version system))
+	  (output-field "License" (asdf:system-license system))
+	  (when-let (url (asdf:component-property system :website))
+	    (output-field "Website"
+			  #'(lambda () (htm (:a :href url "on "	(esc (puri:uri-host (puri:uri url))))))))
+	  
+	  (output-field "Author" (asdf:system-author system))
+	  (output-field "Dependencies"
+			(format nil "~{~A~^, ~}"
+				(mapcar (compose #'string-downcase #'string)
+					(remove-duplicates
+					 (mapcar #'second (asdf:component-depends-on 'asdf:load-op system))
+					 :test #'equal))))))))))
+					 (remove-if-not #'(lambda (dep)
+							    (let ((comp (second dep)))
+							      (and (typep comp 'asdf:system))))
+							)))))))))))
+
 
 (define-layered-function output-toc? (node &key &allow-other-keys))
 (define-layered-method output-toc? (node &key &allow-other-keys)
@@ -286,7 +351,7 @@
   :in-layer toc-generation-layer ((node multisection-docnode) &key &allow-other-keys)
   (with-html-output-to-string (stream)
     (str (doc (docnode-content node)))
-
+    
     (let ((*section-depth* (+ *section-depth* 1)))
       (map nil #'(lambda (section)
 		   (fmt "<h~A>" *section-depth*)
@@ -333,6 +398,7 @@
 ;"
 
 (defun documentation-css ()
+  "Outputs Cascading Stylesheet used for the documentation page."
   (with-css-output-to-string (s)
     (:a :text-decoration "none")
     (:a\:hover :text-decoration "underline")
@@ -340,5 +406,13 @@
 	  :border "1px solid #aaaaff"
 	  :padding ".5em"
 	  :margin-left "2em")
-    (:.symdoc :margin-left "3em")))
+    (:.symdoc :margin-left "3em")
+    (:.asdf :float "right" :clear "right" :margin "1em .7em" :width "18em"
+	    :background-color "#ddeeff"
+	    :border "1px solid #aaaaff")
+    ((ancestor :.asdf :p) :margin ".3em 0")
+    ((ancestor :.asdf :small) :font-size "80%")
+    ((ancestor :.asdf :table) :font-size "80%")
+    ((ancestor :.asdf :table :td) :vertical-align "text-top")))
+	  
      

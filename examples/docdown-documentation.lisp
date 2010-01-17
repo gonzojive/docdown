@@ -96,11 +96,11 @@ out of ;;;-style comments or anything fancy.
 docdown graph with the `HTML-GENERATION-LAYER` active.  ")
       (:children
        (defdoc generate-html-page :function
-	 (:subject-symbol 'generate-html-page)
 	 (:content
 	  "Given a page docnode , generates a sting of HTML"))
+       (defdoc documentation-css :function)
+
        (defdoc doc :function
-	 (:subject-symbol 'doc)
 	 (:content
 	  "Given a docnode, generates some sort of documentation for
 it.  Behavior depends on the active ContextL layers."))))))
