@@ -1,5 +1,7 @@
 (in-package :docdown)
 
+(declaim (optimize (debug 3)))
+
 ;;;  finding/registering docnode classes with the system
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defvar *docnode-class-aliases* nil
@@ -51,8 +53,13 @@
 	 ,instance))))
 
 (defmacro define-option-evaluator (option-keyword lambda-list &body body)
-  `(push (cons ,option-keyword
-	       (lambda (,@lambda-list) ,@body)) *option-evaluators*))
+  `(progn
+     (removef  *option-evaluators* ',option-keyword :key #'car)
+     (push (cons ',option-keyword   (lambda (,@lambda-list) ,@body))
+           *option-evaluators*)))
+
+(define-option-evaluator :html (html-value)
+  (list :html html-value))
 
 (define-option-evaluator :content (&rest args)
   (list :content `(docdown ,@args)))
@@ -87,7 +94,10 @@
   ((subject :initarg :subject :initform nil :accessor docnode-subject)
    (name :initarg :name :initform nil :accessor docnode-name)
    (title :initarg :title :initform nil :accessor docnode-title)
-   (content :initarg :content :initform nil :accessor docnode-content)))
+   (content :initarg :content :initform nil :accessor docnode-content)
+   ))
+
+(register-docnode-class (find-class 'standard-docnode) :aliases '(:standard))
 
 (defmethod print-object ((node standard-docnode) s)
 	   (print-unreadable-object (node s :type t :identity nil)
@@ -142,6 +152,15 @@
 (define-layered-class markdown-docnode
   (abstract-docnode)
   ((markdown :initarg :markdown :initform nil :accessor docnode-markdown)))
+
+(register-docnode-class (find-class 'markdown-docnode) :aliases '(:markdown))
+
+;;; markdown docnode
+(define-layered-class html-docnode
+  (abstract-docnode)
+  ((html :initarg :html :initform nil :accessor docnode-html)))
+
+(register-docnode-class (find-class 'html-docnode) :aliases '(:html))
 
 ;;;; Introducing the HTML-GENERATION-LAYER
 (deflayer html-generation-layer)
@@ -284,14 +303,14 @@
 	  (output-field "Author" (asdf:system-author system))
 	  (output-field "Dependencies"
 			(format nil "~{~A~^, ~}"
-				(mapcar (compose #'string-downcase #'string)
-					(remove-duplicates
-					 (mapcar #'second (asdf:component-depends-on 'asdf:load-op system))
-					 :test #'equal))))))))))
-					 (remove-if-not #'(lambda (dep)
-							    (let ((comp (second dep)))
-							      (and (typep comp 'asdf:system))))
-							)))))))))))
+				(sort
+				 (mapcar (compose #'string-downcase #'string)
+					 (remove-duplicates
+					  (apply #'append
+						 (mapcar #'rest (asdf:component-depends-on 'asdf:compile-op system)))
+					  :test #'equal))
+				 #'string-lessp)))))))))
+
 
 
 (define-layered-function output-toc? (node &key &allow-other-keys))
@@ -365,6 +384,10 @@
   :in-layer html-generation-layer ((node markdown-docnode) &key &allow-other-keys)
   (with-output-to-string (stream)
     (markdown:markdown (docnode-markdown node) :stream stream)))
+
+(define-layered-method doc
+  :in-layer html-generation-layer ((node html-docnode) &key &allow-other-keys)
+  (docnode-html node))
 
 (define-layered-method doc
   :in-layer html-generation-layer ((node string) &key &allow-other-keys)
