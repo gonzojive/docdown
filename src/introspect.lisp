@@ -99,7 +99,7 @@ the rest alone."
   "Returns a list with one entry for a generic function and one
 entry for each of its methods if NAME names a generic function."
   (when (and (fboundp name)
-             (typep (fdefinition name) 'closer-mop:standard-generic-function))
+             (typep (fdefinition name) 'cl:standard-generic-function))
     (let* ((lambda-list (function-lambda-list name))
            (generic-function-documentation (documentation name 'function))
            (generic-function-entry           

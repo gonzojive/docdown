@@ -322,8 +322,8 @@
 (define-layered-method doc
   :in-layer html-generation-layer ((node multisection-docnode) &key &allow-other-keys)
   (with-html-output-to-string (stream)
-    (str (doc (docnode-content node)))
     (:a :name (anchor-id node))
+    (str (doc (docnode-content node)))
     
     (when (output-toc? node)
       (htm
@@ -429,6 +429,9 @@
 	  :border "1px solid #aaaaff"
 	  :padding ".5em"
 	  :margin-left "2em")
+    (:blockquote :padding "0 .5em"
+                 :margin-left "2em"
+                 :font-style "italic")
     (:.symdoc :margin-left "3em")
     (:.asdf :float "right" :clear "right" :margin "1em .7em" :width "18em"
 	    :background-color "#ddeeff"
