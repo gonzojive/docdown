@@ -119,20 +119,55 @@
 	(setf (docnode-subject-symbol node) it)))))
 
 
-(define-layered-class function-docnode
+(define-layered-class function-like-docnode
   (symbolic-docnode)
   ())
 
-(register-docnode-class (find-class 'function-docnode) :aliases '(:function))
+(define-layered-class function-docnode
+  (function-like-docnode)
+  ())
 
-(defmethod initialize-instance :after ((node function-docnode) &rest rest &key &allow-other-keys)
+(define-layered-class generic-function-docnode
+  (function-like-docnode)
+  ())
+
+(defgeneric function-like-keyword (function-like)
+  (:documentation "Keyword used to look up appropriate documentation entries"))
+
+(defmethod function-like-keyword ((f function-docnode))
+  :function)
+
+(defmethod function-like-keyword ((f generic-function-docnode))
+  :generic-function)
+
+(register-docnode-class (find-class 'function-docnode) :aliases '(:function))
+(register-docnode-class (find-class 'generic-function-docnode) :aliases '(:generic))
+
+(defgeneric primary-docstring (node)
+  (:documentation "The primary docstring for a particular node, if it
+so happens that node has a docstring in the source code."))
+
+(defmethod primary-docstring ((node function-docnode))
+  (fourth (find (function-like-keyword node)
+                (generic-function-doc-entry (docnode-subject-symbol node))
+                :key #'second)))
+
+
+(defmethod primary-docstring ((node generic-function-docnode))
+  (let ((entry (generic-function-doc-entry (docnode-subject-symbol node))))
+    (fourth (find (function-like-keyword node)
+                  entry
+                  :key #'second))))
+
+
+(defmethod initialize-instance :after ((node function-like-docnode) &rest rest &key &allow-other-keys)
   (declare (ignore rest))
+  (defparameter *debug* node)
   (format t "FUNCTION modified: ~A ~A" (docnode-subject-symbol node) (docnode-subject node))
   (when (not (docnode-subject node))
     (setf (docnode-subject node) (fdefinition (docnode-subject-symbol node))))
   (when (not (docnode-content node))
-    (when-let (docstring (fourth (find :function (function-doc-entry (docnode-subject-symbol node))
-				       :key #'second)))
+    (when-let (docstring (primary-docstring node))
       (setf (docnode-content node) (make-instance 'markdown-docnode :markdown docstring)))))
 
 
@@ -402,10 +437,20 @@
 	   (doc it)
 	   (error "Did not find docnode named ~S" symbol))))
 
+(defgeneric type-title (node)
+  (:documentation "String for the type of the node, human readable"))
+
+(defmethod type-title ((node function-docnode))
+  "Function")
+
+(defmethod type-title ((node generic-function-docnode))
+  "Generic Function")
+  
+
 (define-layered-method doc
-  :in-layer html-generation-layer ((node function-docnode) &key &allow-other-keys)
+  :in-layer html-generation-layer ((node function-like-docnode) &key &allow-other-keys)
   (with-html-output-to-string (stream)
-    (:div "[Function]")
+    (:div "[" (esc (type-title node)) "]")
     (:div
      (:strong (esc (string-downcase (symbol-name (docnode-subject-symbol node)))))
      "  "
